@@ -150,16 +150,6 @@ export default function DepositPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-white to-amber-50 border-b border-amber-100">
-        <div className="container mx-auto px-6 py-6 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center text-amber-800 hover:text-amber-600">
-            <ArrowLeft className="mr-2" size={18} />
-            <span className="font-dmserif">Back to Dashboard</span>
-          </Link>
-          <div className="text-2xl font-dmserif text-amber-800">Savium</div>
-        </div>
-      </header>
       
       <main className="container mx-auto px-6 py-12 max-w-2xl">
         <h1 className="text-4xl font-dmserif text-amber-800 mb-8 text-center">
@@ -471,12 +461,6 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
           // Set account as connected (in case this is first deposit)
           "financialInfo.accountConnected": true,
           
-          // Add a record of this transaction to metrics
-          "metrics.lastDeposit": serverTimestamp(),
-          "metrics.lastDepositAmount": amount,
-          
-          // Update the last active timestamp
-          "metrics.lastActive": serverTimestamp()
         });
         
         // Commit the batch

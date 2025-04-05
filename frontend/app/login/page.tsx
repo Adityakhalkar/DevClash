@@ -10,7 +10,7 @@ import {
   GoogleAuthProvider,
   sendSignInLinkToEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
 import { auth } from '@/lib/firebase'; // Ensure you have firebase setup in this path
 
 
@@ -66,12 +66,6 @@ const LoginPage = () => {
           portfolioValue: 0
         },
         
-        // Usage metrics
-        metrics: {
-          loginCount: 1,
-          lastActive: timestamp
-        },
-        
         // Settings & preferences
         settings: {
           notifications: {
@@ -93,24 +87,21 @@ const LoginPage = () => {
         });
         console.log("New user added to Firestore");
       } else {
-        // Existing user - update relevant fields
-        const updates = {
-          lastLogin: timestamp,
-          'metrics.loginCount': userSnap.data().metrics?.loginCount + 1 || 1,
-          'metrics.lastActive': timestamp
-        };
+        // IMPORTANT FIX: Use updateDoc instead of setDoc with merge
+        // and only update specific fields to prevent infinite updates
+        const currentData = userSnap.data();
         
-        // If they logged in with a different provider, note it
-        if (userData.authProvider !== userSnap.data().authProvider) {
-          const updatesWithAuth = updates as Record<string, any>;
-          updatesWithAuth.authProviders = [
-            ...(userSnap.data().authProviders || [userSnap.data().authProvider]),
-            userData.authProvider
-          ];
+        // If they logged in with a different provider, add it to the array
+        if (userData.authProvider !== currentData.authProvider) {
+          const existingProviders = currentData.authProviders || 
+            (currentData.authProvider ? [currentData.authProvider] : []);
+          
+          if (!existingProviders.includes(userData.authProvider)) {
+            await updateDoc(userRef, {
+              authProviders: [...existingProviders, userData.authProvider]
+            });
+          }
         }
-        
-        await setDoc(userRef, updates, { merge: true });
-        console.log("User data updated in Firestore");
       }
     } catch (err) {
       console.error("Error saving user data: ", err);
@@ -118,13 +109,17 @@ const LoginPage = () => {
   };
 
   // Handle email/password login
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    try {
-      if (isSignUp) {
+    const handleEmailLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      setError('');
+      
+      try {
+        if (isSignUp) {
+          // Clear any existing login flags first
+          const currentUser = auth.currentUser;
+          localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        
         // Create the user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
@@ -137,8 +132,12 @@ const LoginPage = () => {
         });
         
         setSuccess('Account created successfully!');
-        setTimeout(() => router.push('/dashboard'), 1500);
       } else {
+        // Clear any existing login flags first
+        const currentUser = auth.currentUser;
+        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         
         // Update Firestore
@@ -160,9 +159,13 @@ const LoginPage = () => {
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    setError('');
-    
     try {
+      // Clear any existing login flags first
+      const currentUser = auth.currentUser;
+      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+      // Clear any existing login flags first
+      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+      
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
@@ -184,10 +187,10 @@ const LoginPage = () => {
     }
   };
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-100 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex flex-col">
       {/* Header with logo */}
-      <header className="container mx-auto px-4 py-4 bg-yellow-500 shadow-md flex items-center justify-between">
-        <Link href="/" className="text-2xl font-bold text-black">
+      <header className="container mx-auto px-6 py-6">
+        <Link href="/" className="text-2xl font-bold text-blue-600">
           Savium
         </Link>
       </header>
@@ -233,7 +236,7 @@ const LoginPage = () => {
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2 text-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter your full name"
                     required
                   />
@@ -307,18 +310,15 @@ const LoginPage = () => {
             </form>
           )}
         </div>
-        <div className="hidden lg:flex w-1/2 h-full items-center justify-center pl-0 pr-12">
-          <div className="rounded-xl shadow-lg p-8 w-full max-w-md border-2 border-yellow-500">
-            <Spline
-              scene="https://prod.spline.design/21Hz8Ob26LvB5hSN/scene.splinecode"
-              className="w-full h-full"
-            />
-          </div>
-        </div> 
       </main>
       
       {/* Footer */}
-      <footer className="container mx-auto px-6 py-4 text-center text-white text-sm bg-black border-t border-yellow-600">
+      <footer className="container mx-auto px-6 py-4 text-center text-gray-600 text-sm">
+        <p className="mb-2">
+          By signing in, you agree to Savium&apos;s{' '}
+          <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link> and{' '}
+          <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
+        </p>
         <p>
           &copy; {new Date().getFullYear()} Savium. All rights reserved.
         </p>
