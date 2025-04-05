@@ -353,28 +353,7 @@ export default function Dashboard() {
               className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
             >
               <CreditCard className="h-4 w-4" />
-              <span>Accounts</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <DollarSign className="h-4 w-4" />
-              <span>Portfolio Value</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <LineChart className="h-4 w-4" />
-              <span>Investments</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <BarChart className="h-4 w-4" />
-              <span>Returns</span>
+              <span>Account Summary</span>
             </a>
             <a
               href="#"
