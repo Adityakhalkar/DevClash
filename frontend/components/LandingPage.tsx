@@ -1,32 +1,24 @@
 "use client";
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Spline3DText from './SplineText3D';
 const LandingPage: React.FC = () => {
     const Router = useRouter();
     
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
-      {/* Navigation */}
-      <nav className="container mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="text-2xl font-bold text-blue-600">
-            Savium
-          </div>
-          <div className="hidden md:flex space-x-8">
-            <Link href="#features" className="text-gray-700 hover:text-blue-600 transition">Features</Link>
-            <Link href="#how-it-works" className="text-gray-700 hover:text-blue-600 transition">How It Works</Link>
-            <Link href="#testimonials" className="text-gray-700 hover:text-blue-600 transition">Testimonials</Link>
-          </div>
-          <div className="flex space-x-4">
-            <button className="px-4 py-2 rounded text-gray-700 hover:text-blue-600 transition" onClick={()=> Router.push('/login')}>Login</button>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition">
-              Get Started
-            </button>
-          </div>
-        </div>
-      </nav>
+
+      <div className="min-h-screen flex flex-col">
+      <main className="flex-grow">
+        <Spline3DText 
+          url="https://prod.spline.design/wJZpXl8YIuYVexmU/scene.splinecode" 
+          height="600px"
+          className="w-full"
+        />
+      </main>
+    </div>
 
       {/* Hero Section */}
       <section className="container mx-auto px-6 py-16 md:py-24">
