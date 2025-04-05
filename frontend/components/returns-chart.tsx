@@ -1,7 +1,7 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { doc, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase"
@@ -13,7 +13,7 @@ export function ReturnsChart() {
   const [user, setUser] = useState<any>(null)
   const [returnsData, setReturnsData] = useState<{ month: string; return: number }[]>([])
 
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+  const months = useMemo(() => ["Jan", "Feb", "Mar", "Apr", "May", "Jun"], []);
 
   useEffect(() => {
     const auth = getAuth()
@@ -47,7 +47,7 @@ export function ReturnsChart() {
     }
 
     fetchReturns()
-  }, [user])
+  }, [user, months])
 
   return (
     <ResponsiveContainer width="100%" height={300}>

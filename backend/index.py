@@ -147,7 +147,7 @@ async def save_transaction(user_id: str, transaction_type: str, amount: float, s
         "metadata": metadata or {}
     }
     
-    await db.collection("transactions").document(transaction_id).set(transaction_data)
+    db.collection("transactions").document(transaction_id).set(transaction_data)
     return transaction_id
 
 # --- API Endpoints ---
@@ -401,11 +401,13 @@ async def stripe_webhook(request: Request, background_tasks: BackgroundTasks):
         if event_type == "payment_intent.succeeded":
             # Handle successful payments
             await handle_successful_payment(event_data, background_tasks)
-            
         elif event_type == "payment_intent.payment_failed":
             # Handle failed payments
             await handle_failed_payment(event_data, background_tasks)
             
+        elif event_type == "charge.succeeded":
+            # Handle successful charges (for one-time payments)
+            await handle_successful_payment(event_data, background_tasks)
         elif event_type == "charge.refunded":
             # Handle refunds
             await handle_refund(event_data, background_tasks)
@@ -461,14 +463,66 @@ async def handle_successful_payment(payment_intent, background_tasks):
             print("⚠️ No userId in payment metadata")
             return
             
-        amount = payment_intent["amount"] / 100  # Convert cents to dollars
+        amount = payment_intent["amount"] / 100  # Convert cents to dollars/rupees
         payment_id = payment_intent["id"]
         payment_method = payment_intent.get("payment_method")
+        payment_purpose = payment_intent["metadata"].get("purpose")
         
-        # Check if this payment is associated with an investment
-        investment_id = payment_intent["metadata"].get("investmentId")
-        if investment_id:
-            # Update investment status
+        # Handle deposit specifically
+        if payment_purpose == "account_deposit":
+            # Update deposit status
+            deposits_ref = db.collection("deposits").where("paymentIntentId", "==", payment_id).limit(1)
+            deposits = list(deposits_ref.stream())
+            
+            if deposits:
+                deposit_doc = deposits[0]
+                deposit_ref = db.collection("deposits").document(deposit_doc.id)
+                
+                # Mark deposit as completed
+                deposit_ref.update({
+                    "status": "completed",
+                    "completedAt": datetime.now().isoformat(),
+                })
+                
+                # Update user's financial info for the deposit
+                user_ref = db.collection("users").document(user_id)
+                user_doc = user_ref.get()
+                
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    current_invested = user_data.get("financialInfo", {}).get("totalInvested", 0)
+                    current_portfolio = user_data.get("financialInfo", {}).get("portfolioValue", 0)
+                    
+                    # Update both totalInvested and portfolioValue
+                    user_ref.update({
+                        "financialInfo.totalInvested": current_invested + amount,
+                        "financialInfo.portfolioValue": current_portfolio + amount,
+                        "financialInfo.accountConnected": True,
+                        "financialInfo.lastDepositDate": datetime.now().isoformat()
+                    })
+                    
+                    print(f"✅ User financial info updated for deposit: {payment_id}")
+            else:
+                print(f"⚠️ No deposit found for paymentIntentId: {payment_id}")
+            
+            # Record transaction
+            background_tasks.add_task(
+                save_transaction, 
+                user_id, 
+                "deposit", 
+                amount, 
+                "completed",
+                {
+                    "paymentIntentId": payment_id,
+                    "paymentMethod": payment_method,
+                    "description": payment_intent.get("description", "Account deposit")
+                }
+            )
+            
+        # If investment payment, handle it (existing logic)
+        elif payment_intent["metadata"].get("investmentId"):
+            investment_id = payment_intent["metadata"].get("investmentId")
+            # Rest of your existing investment handling code...
             inv_ref = db.collection("investments").document(investment_id)
             inv_doc = inv_ref.get()
             
@@ -493,26 +547,45 @@ async def handle_successful_payment(payment_intent, background_tasks):
                 if user_doc.exists:
                     user_data = user_doc.to_dict()
                     current_invested = user_data.get("financialInfo", {}).get("totalInvested", 0)
+                    current_portfolio = user_data.get("financialInfo", {}).get("portfolioValue", 0)
                     
                     user_ref.update({
                         "financialInfo.totalInvested": current_invested + amount,
+                        "financialInfo.portfolioValue": current_portfolio + amount,
                         "financialInfo.lastInvestmentDate": datetime.now().isoformat()
                     })
-        
-        # Record transaction
-        background_tasks.add_task(
-            save_transaction, 
-            user_id, 
-            "payment", 
-            amount, 
-            "completed",
-            {
-                "paymentIntentId": payment_id,
-                "paymentMethod": payment_method,
-                "investmentId": investment_id,
-                "description": payment_intent.get("description", "Investment payment")
-            }
-        )
+            
+                # Record transaction (existing code)
+                background_tasks.add_task(
+                    save_transaction, 
+                    user_id, 
+                    "payment", 
+                    amount, 
+                    "completed",
+                    {
+                        "paymentIntentId": payment_id,
+                        "paymentMethod": payment_method,
+                        "investmentId": investment_id,
+                        "description": payment_intent.get("description", "Investment payment")
+                    }
+                )
+        else:
+            # Generic payment without specific purpose
+            print(f"⚠️ Payment without specific purpose: {payment_id}")
+            
+            # Still record the transaction for auditing
+            background_tasks.add_task(
+                save_transaction, 
+                user_id, 
+                "payment", 
+                amount, 
+                "completed",
+                {
+                    "paymentIntentId": payment_id,
+                    "paymentMethod": payment_method,
+                    "description": payment_intent.get("description", "Unknown payment")
+                }
+            )
         
         print(f"✅ Successful payment processed: {payment_id}")
         

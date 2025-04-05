@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { doc, getDoc, getFirestore, updateDoc, onSnapshot } from "firebase/firestore"
+import { auth } from "@/lib/firebase"
 import {
   BarChart,
   Bell,
@@ -19,10 +22,7 @@ import {
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useRouter } from "next/navigation"
-import { signOut } from "firebase/auth"
-import { doc, getDoc, getFirestore, updateDoc } from "firebase/firestore"
-import { auth } from "@/lib/firebase"
-
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -32,13 +32,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import { PortfolioChart } from "./portfolio-chart"
 import { ReturnsChart } from "./returns-chart"
+import Link from "next/link"
 // import { SpendingChart } from "./spending-chart"
 // import { TransactionsList } from "./transactions-list"
 
@@ -57,6 +57,8 @@ interface UserData {
     portfolioValue: number
     totalInvested: number
     totalReturns: number
+    lastDepositDate: string
+    firstDepositDate: string
   }
   investmentProfile: {
     investmentGoals: string[]
@@ -84,48 +86,114 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview")
   const [userData, setUserData] = useState<UserData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authInitialized, setAuthInitialized] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const router = useRouter()
   const db = getFirestore()
 
-  // Fetch user data from Firestore
+  // Listen for auth state changes
   useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const currentUser = auth.currentUser
-        if (!currentUser) {
-          router.push("/login")
-          return
-        }
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user)
+      setAuthInitialized(true)
 
-        const userRef = doc(db, "users", currentUser.uid)
-        const userSnap = await getDoc(userRef)
+      // If we have cached data, use it immediately while fetching fresh data
+      const cachedData = localStorage.getItem("userData")
+      if (cachedData && !userData) {
+        try {
+          const parsedData = JSON.parse(cachedData)
+          setUserData(parsedData)
 
-        if (userSnap.exists()) {
-          const data = userSnap.data() as UserData
-          setUserData(data)
-
-          // Set theme based on user preference
-          if (data.settings?.theme) {
-            setTheme(data.settings.theme)
+          // Apply cached theme preference immediately
+          if (parsedData.settings?.theme) {
+            setTheme(parsedData.settings.theme)
           }
-
-          // Update last active timestamp
-          await updateDoc(userRef, {
-            "metrics.lastActive": new Date().toISOString(),
-          })
-        } else {
-          console.error("No user data found")
-          router.push("/login")
+        } catch (e) {
+          console.error("Error parsing cached user data", e)
         }
-      } catch (error) {
-        console.error("Error fetching user data:", error)
-      } finally {
-        setLoading(false)
       }
-    }
+    })
 
-    fetchUserData()
-  }, [db, router, setTheme])
+    return () => unsubscribe()
+  }, [setTheme, userData])
+
+  // Redirect if not authenticated after auth is initialized
+  useEffect(() => {
+    if (authInitialized && !currentUser) {
+      router.push("/login")
+    }
+  }, [authInitialized, currentUser, router])
+
+  // Fetch user data from Firestore when user is authenticated
+  useEffect(() => {
+    // Store unsubscribe function to cleanup on unmount
+    let unsubscribeUser: (() => void) | null = null;
+    
+    const subscribeToUserData = () => {
+      if (!currentUser) return;
+      
+      try {
+        setLoading(true);
+        const userRef = doc(db, "users", currentUser.uid);
+        
+        // Set up real-time listener instead of one-time fetch
+        unsubscribeUser = onSnapshot(userRef, (docSnapshot) => {
+          if (docSnapshot.exists()) {
+            const data = docSnapshot.data() as UserData;
+            setUserData(data);
+            
+            // Cache the user data
+            localStorage.setItem("userData", JSON.stringify(data));
+            
+            // Set theme based on user preference
+            if (data.settings?.theme) {
+              setTheme(data.settings.theme);
+            }
+            
+            // Only update lastActive in a separate call to avoid loops
+            updateLastActive(currentUser.uid).catch(err => 
+              console.error("Error updating last active:", err)
+            );
+          } else {
+            console.error("No user data found");
+            // Don't redirect here, let the auth effect handle it
+          }
+          
+          // Once we have data, we're no longer loading
+          setLoading(false);
+        }, (error) => {
+          console.error("Error listening to user data:", error);
+          setLoading(false);
+        });
+      } catch (error) {
+        console.error("Error setting up user data listener:", error);
+        setLoading(false);
+      }
+    };
+    
+    // Helper function to update lastActive timestamp without triggering listener events
+    const updateLastActive = async (uid: string) => {
+      try {
+        const userRef = doc(db, "users", uid);
+        await updateDoc(userRef, {
+          "metrics.lastActive": new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error("Error updating last active timestamp:", error);
+      }
+    };
+    
+    if (currentUser) {
+      subscribeToUserData();
+    }
+    
+    // Cleanup function to unsubscribe when component unmounts
+    return () => {
+      if (unsubscribeUser) {
+        unsubscribeUser();
+      }
+    };
+  }, [currentUser, db, setTheme]);
 
   // Handle theme toggle and save to user preferences
   const handleThemeToggle = async () => {
@@ -133,12 +201,20 @@ export default function Dashboard() {
     setTheme(newTheme)
 
     try {
-      const currentUser = auth.currentUser
       if (currentUser) {
         const userRef = doc(db, "users", currentUser.uid)
         await updateDoc(userRef, {
           "settings.theme": newTheme,
         })
+
+        // Update cached data
+        if (userData) {
+          const updatedData = {
+            ...userData,
+            settings: { ...userData.settings, theme: newTheme },
+          }
+          localStorage.setItem("userData", JSON.stringify(updatedData))
+        }
       }
     } catch (error) {
       console.error("Error updating theme preference:", error)
@@ -149,13 +225,16 @@ export default function Dashboard() {
   const handleLogout = async () => {
     try {
       await signOut(auth)
+      // Clear cached data
+      localStorage.removeItem("userData")
       router.push("/login")
     } catch (error) {
       console.error("Error signing out:", error)
     }
   }
 
-  if (loading) {
+  // Show loading state while auth is initializing or data is loading
+  if (!authInitialized || (currentUser && loading)) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -215,10 +294,10 @@ export default function Dashboard() {
               </nav>
             </SheetContent>
           </Sheet>
-          <a href="#" className="flex items-center gap-2 text-lg font-semibold">
+          <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
             <Wallet className="h-6 w-6" />
             <span>Savium</span>
-          </a>
+          </Link>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" size="icon">
@@ -234,7 +313,7 @@ export default function Dashboard() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
                 {userData?.photoURL ? (
-                  <img
+                  <Image
                     src={userData.photoURL || "/placeholder.svg"}
                     alt={userData.name || "User"}
                     className="rounded-full h-8 w-8 object-cover"
@@ -315,13 +394,13 @@ export default function Dashboard() {
         </aside>
         {/* Main Content */}
         <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8">
-        <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold md:text-2xl">Dashboard</h1>
-        <div className="flex gap-4">
-            <Button variant="default">Deposit</Button>
-            <Button variant="outline">Withdraw</Button>
-        </div>
-        </div>
+            <div className="flex gap-4">
+              <Button variant="default" onClick={() => router.push(`/deposit/${currentUser?.uid}`)}>Deposit</Button>
+              <Button variant="outline">Withdraw</Button>
+            </div>
+          </div>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <div className="flex items-center justify-between mb-4">
               <TabsList>
@@ -341,6 +420,7 @@ export default function Dashboard() {
                       ${userData?.financialInfo?.portfolioValue?.toLocaleString() || "0.00"}
                     </div>
                     <p className="text-xs text-muted-foreground">
+                      {userData?.financialInfo?.firstDepositDate  }
                       <span className="text-green-500">+20.1%</span> from last month
                     </p>
                   </CardContent>

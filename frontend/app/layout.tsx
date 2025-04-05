@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { DM_Serif_Display } from "next/font/google";
-import "./globals.css";
+import { AuthProvider } from '@/context/AuthContext';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from 'react-hot-toast';
+import './globals.css';
+import Navbar from "@/components/navbar";
 
 const dmserif = DM_Serif_Display({
   subsets: ["latin"],
@@ -18,11 +22,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   return (
-    <html lang="en" className={`${dmserif.variable}`}>
-      <body className="font-dmserif"
-      >
-        {children}
+    <html lang="en" className={`${dmserif.variable}`} suppressHydrationWarning>
+      <body className="font-dmserif">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            <Navbar />
+            <Toaster position="top-right" />
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

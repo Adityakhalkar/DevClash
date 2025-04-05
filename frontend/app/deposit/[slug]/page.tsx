@@ -14,7 +14,7 @@ import {
   useElements 
 } from '@stripe/react-stripe-js';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -196,7 +196,7 @@ export default function DepositPage() {
             <div className="bg-amber-50 p-6 border-b border-amber-100">
               <h3 className="text-xl font-dmserif text-amber-800 mb-2">Select Deposit Amount</h3>
               <p className="text-amber-700 text-sm">
-                Choose how much you'd like to add to your investment account
+                Choose how much youd like to add to your investment account
               </p>
             </div>
             
@@ -424,9 +424,20 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
         // Payment succeeded
         setSuccess(true);
         
-        // Save deposit record to Firestore
+        // Generate unique ID for the deposit
         const depositId = crypto.randomUUID();
-        await setDoc(doc(db, "deposits", depositId), {
+        
+        // Get a reference to the user's document
+        const userRef = doc(db, "users", user.uid);
+        
+        // Get a reference to the new deposit document
+        const depositRef = doc(db, "deposits", depositId);
+        
+        // Use a batch write to ensure both operations succeed or fail together
+        const batch = writeBatch(db);
+        
+        // Add the deposit document
+        batch.set(depositRef, {
           userId: user.uid,
           amount: amount,
           currency: "inr",
@@ -449,12 +460,37 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
           }
         });
         
+        // Update the user's financial information
+        batch.update(userRef, {
+          // Increment total invested amount
+          "financialInfo.totalInvested": increment(amount),
+          
+          // Also increment portfolio value (since deposits add to portfolio)
+          "financialInfo.portfolioValue": increment(amount),
+          
+          // Set account as connected (in case this is first deposit)
+          "financialInfo.accountConnected": true,
+          
+          // Add a record of this transaction to metrics
+          "metrics.lastDeposit": serverTimestamp(),
+          "metrics.lastDepositAmount": amount,
+          
+          // Update the last active timestamp
+          "metrics.lastActive": serverTimestamp()
+        });
+        
+        // Commit the batch
+        await batch.commit();
+        
+        console.log("Deposit recorded and user financial info updated successfully!");
+        
         // Redirect after short delay
         setTimeout(() => {
           router.push('/dashboard');
         }, 2000);
       }
     } catch (error: any) {
+      console.error("Error processing payment:", error);
       setErrorMessage(error.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
