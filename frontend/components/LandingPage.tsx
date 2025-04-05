@@ -1,10 +1,23 @@
 "use client";
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Spline3DText from './SplineText3D';
 const LandingPage: React.FC = () => {
     const Router = useRouter();
+    const [isLoaded, setIsLoaded] = useState(false);
+  
+  const handleSplineLoad = (splineApp: any) => {
+    console.log('Spline scene loaded successfully');
+    setIsLoaded(true);
+    
+    // Example of scene interaction
+    // const textObject = splineApp.findObjectByName('YourTextName');
+    // if (textObject) {
+    //   // You can interact with your text object here
+    // }
+  };
     
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
@@ -27,6 +40,23 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       </nav>
+
+      <div className="min-h-screen flex flex-col">
+      <main className="flex-grow">
+        {!isLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
+            <div className="text-lg">Loading 3D scene...</div>
+          </div>
+        )}
+        
+        <Spline3DText 
+          url="https://prod.spline.design/wJZpXl8YIuYVexmU/scene.splinecode" 
+          height="600px"
+          onLoad={handleSplineLoad}
+          className="w-full"
+        />
+      </main>
+    </div>
 
       {/* Hero Section */}
       <section className="container mx-auto px-6 py-16 md:py-24">
