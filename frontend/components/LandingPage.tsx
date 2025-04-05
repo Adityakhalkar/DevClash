@@ -140,7 +140,7 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             <p className="text-gray-600">
-              "I never thought investing was for me until I found Savium. The micro-investment approach made it so easy to get started without feeling overwhelmed."
+              &quot;I never thought investing was for me until I found Savium. The micro-investment approach made it so easy to get started without feeling overwhelmed.&quot;
             </p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow">
@@ -152,7 +152,7 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             <p className="text-gray-600">
-              "The round-up feature has been a game-changer for me. I've saved and invested more in 6 months than I did in years before using Savium."
+              &quot;The round-up feature has been a game-changer for me. I&apos;ve saved and invested more in 6 months than I did in years before using Savium.&quot;
             </p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow">
@@ -164,7 +164,7 @@ const LandingPage: React.FC = () => {
               </div>
             </div>
             <p className="text-gray-600">
-              "As someone new to investing, I appreciate how Savium makes everything transparent and educational. I'm learning while my money grows!"
+              &quot;As someone new to investing, I appreciate how Savium makes everything transparent and educational. I&apos;m learning while my money grows!&quot;
             </p>
           </div>
         </div>
