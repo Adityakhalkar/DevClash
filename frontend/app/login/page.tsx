@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Spline from '@splinetool/react-spline';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
@@ -9,8 +10,9 @@ import {
   GoogleAuthProvider,
   sendSignInLinkToEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, getFirestore, serverTimestamp } from 'firebase/firestore';
 import { auth } from '@/lib/firebase'; // Ensure you have firebase setup in this path
+
 
 const LoginPage = () => {
   const router = useRouter();
@@ -64,12 +66,6 @@ const LoginPage = () => {
           portfolioValue: 0
         },
         
-        // Usage metrics
-        metrics: {
-          loginCount: 1,
-          lastActive: timestamp
-        },
-        
         // Settings & preferences
         settings: {
           notifications: {
@@ -91,24 +87,21 @@ const LoginPage = () => {
         });
         console.log("New user added to Firestore");
       } else {
-        // Existing user - update relevant fields
-        const updates = {
-          lastLogin: timestamp,
-          'metrics.loginCount': userSnap.data().metrics?.loginCount + 1 || 1,
-          'metrics.lastActive': timestamp
-        };
+        // IMPORTANT FIX: Use updateDoc instead of setDoc with merge
+        // and only update specific fields to prevent infinite updates
+        const currentData = userSnap.data();
         
-        // If they logged in with a different provider, note it
-        if (userData.authProvider !== userSnap.data().authProvider) {
-          const updatesWithAuth = updates as Record<string, any>;
-          updatesWithAuth.authProviders = [
-            ...(userSnap.data().authProviders || [userSnap.data().authProvider]),
-            userData.authProvider
-          ];
+        // If they logged in with a different provider, add it to the array
+        if (userData.authProvider !== currentData.authProvider) {
+          const existingProviders = currentData.authProviders || 
+            (currentData.authProvider ? [currentData.authProvider] : []);
+          
+          if (!existingProviders.includes(userData.authProvider)) {
+            await updateDoc(userRef, {
+              authProviders: [...existingProviders, userData.authProvider]
+            });
+          }
         }
-        
-        await setDoc(userRef, updates, { merge: true });
-        console.log("User data updated in Firestore");
       }
     } catch (err) {
       console.error("Error saving user data: ", err);
@@ -116,13 +109,17 @@ const LoginPage = () => {
   };
 
   // Handle email/password login
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    try {
-      if (isSignUp) {
+    const handleEmailLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      setError('');
+      
+      try {
+        if (isSignUp) {
+          // Clear any existing login flags first
+          const currentUser = auth.currentUser;
+          localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        
         // Create the user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
@@ -135,8 +132,12 @@ const LoginPage = () => {
         });
         
         setSuccess('Account created successfully!');
-        setTimeout(() => router.push('/dashboard'), 1500);
       } else {
+        // Clear any existing login flags first
+        const currentUser = auth.currentUser;
+        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+        
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         
         // Update Firestore
@@ -158,9 +159,13 @@ const LoginPage = () => {
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    setError('');
-    
     try {
+      // Clear any existing login flags first
+      const currentUser = auth.currentUser;
+      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+      // Clear any existing login flags first
+      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
+      
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
@@ -182,18 +187,13 @@ const LoginPage = () => {
     }
   };
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex flex-col">
-      {/* Header with logo */}
-      <header className="container mx-auto px-6 py-6">
-        <Link href="/" className="text-2xl font-bold text-blue-600">
-          Savium
-        </Link>
-      </header>
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-100 flex flex-col">
       
       {/* Main content */}
-      <main className="flex-grow flex items-center justify-center px-6 py-8">
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
-          <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+      <main className="flex-grow flex items-center justify-center pl-6 py-8 bg-black ">
+      
+        <div className="rounded-xl shadow-lg p-8 w-full max-w-md border-2 border-yellow-500">
+          <h1 className="text-2xl font-bold text-white mb-6 text-center">
             {isSignUp ? 'Create an Account' : 'Welcome Back'}
           </h1>
           
@@ -212,7 +212,7 @@ const LoginPage = () => {
           {/* Authentication method tabs */}
           <div className="flex border-b mb-6">
             <button 
-              className={`flex-1 py-2 text-center ${activeTab === 'email' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500'}`}
+              className={`flex-1 py-2 text-center ${activeTab === 'email' ? 'border-b-2 border-yellow-500 text-yellow-600' : 'text-gray-200'}`}
               onClick={() => setActiveTab('email')}
             >
               Email & Password
@@ -224,13 +224,13 @@ const LoginPage = () => {
             <form onSubmit={handleEmailLogin}>
               {isSignUp && (
                 <div className="mb-4">
-                  <label htmlFor="name" className="block text-gray-700 mb-2">Full Name</label>
+                  <label htmlFor="name" className="block text-gray-200 mb-2">Full Name</label>
                   <input
                     type="text"
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     placeholder="Enter your full name"
                     required
                   />
@@ -238,26 +238,26 @@ const LoginPage = () => {
               )}
               
               <div className="mb-4">
-                <label htmlFor="email" className="block text-gray-700 mb-2">Email Address</label>
+                <label htmlFor="email" className="block text-gray-200 mb-2">Email Address</label>
                 <input
                   type="email"
                   id="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border text-gray-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
                   placeholder="you@example.com"
                   required
                 />
               </div>
               
               <div className="mb-6">
-                <label htmlFor="password" className="block text-gray-700 mb-2">Password</label>
+                <label htmlFor="password" className="block text-gray-200 mb-2">Password</label>
                 <input
                   type="password"
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-200"
                   placeholder="Enter your password"
                   required
                 />
@@ -265,37 +265,37 @@ const LoginPage = () => {
               
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition mb-4"
+                className="w-full bg-yellow-500 text-black py-2 rounded-lg hover:bg-yellow-700 transition mb-4"
                 disabled={loading}
               >
                 {loading ? 'Processing...' : isSignUp ? 'Create Account' : 'Sign In'}
               </button>
               
-              <p className="text-center text-gray-600 mb-4">
+              <p className="text-center text-gray-200 mb-4">
                 {isSignUp ? 'Already have an account?' : "Don't have an account?"} 
                 <button
                   type="button"
                   onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-blue-600 ml-1 hover:underline"
+                  className="text-yellow-500 ml-1 hover:underline"
                 >
                   {isSignUp ? 'Sign In' : 'Sign Up'}
                 </button>
               </p>
               
               <div className="flex items-center my-4">
-                <div className="flex-grow border-t border-gray-300"></div>
-                <span className="px-3 text-gray-500 text-sm">OR</span>
-                <div className="flex-grow border-t border-gray-300"></div>
+                <div className="flex-grow border-t border-gray-200"></div>
+                <span className="px-3 text-gray-200 text-sm">OR</span>
+                <div className="flex-grow border-t border-gray-200"></div>
               </div>
               
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                className="w-full flex items-center justify-center bg-white border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50 transition"
+                className="w-full flex items-center justify-center bg-yellow-500 border border-gray-200 text-gray-900 py-2 rounded-lg hover:bg-white hover:text-yellow-500 transition"
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
-                    fill="#4285F4"
+                    fill="#000000"
                     d="M12.24 10.285V14.4h6.806c-.275 1.765-2.056 5.174-6.806 5.174-4.095 0-7.439-3.389-7.439-7.574s3.345-7.574 7.439-7.574c2.33 0 3.891.989 4.785 1.849l3.254-3.138C18.189 1.186 15.479 0 12.24 0c-6.635 0-12 5.365-12 12s5.365 12 12 12c6.926 0 11.52-4.869 11.52-11.726 0-.788-.085-1.39-.189-1.989H12.24z"
                   />
                 </svg>
@@ -304,19 +304,16 @@ const LoginPage = () => {
             </form>
           )}
         </div>
+        <div className="lg:hidden h-full items-center justify-center pl-6 pr-6" />
+        <div className="hidden lg:flex h-full items-center justify-center pl-6 pr-6">
+          <div className="rounded-xl shadow-lg p-8 w-full border-2 border-yellow-500">
+            <Spline
+              scene="https://prod.spline.design/21Hz8Ob26LvB5hSN/scene.splinecode"
+              className="w-full h-full"
+            />
+          </div>
+        </div> 
       </main>
-      
-      {/* Footer */}
-      <footer className="container mx-auto px-6 py-4 text-center text-gray-600 text-sm">
-        <p className="mb-2">
-          By signing in, you agree to Savium&apos;s{' '}
-          <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link> and{' '}
-          <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
-        </p>
-        <p>
-          &copy; {new Date().getFullYear()} Savium. All rights reserved.
-        </p>
-      </footer>
     </div>
   );
 };
