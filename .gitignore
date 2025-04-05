@@ -18,6 +18,9 @@
 /frontend/.next/
 /out/
 
+# fastapi
+/backend/firebase-credentials.json
+
 # production
 /build
 
