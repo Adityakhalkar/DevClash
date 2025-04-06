@@ -1983,7 +1983,7 @@ const calculateEstimatedCompletion = (currentAmount: number, targetAmount: numbe
                               <td className="text-right py-3 px-4">₹{monthlySavings.toLocaleString()}</td>
                               <td className="text-right py-3 px-4">{saviumRate}%</td>
                               <td className="text-right py-3 px-4 font-bold">
-                                ₹{(userData?.financialInfo?.portfolioValue || 0 + calculateProjection(monthlySavings, saviumRate, projectionYears)).toLocaleString()}
+                                ₹{(calculateProjection(monthlySavings, saviumRate, projectionYears)).toLocaleString()}
                               </td>
                               <td className="text-right py-3 px-4 text-green-600 font-medium">
                                 +{calculateGrowthPercentage(monthlySavings, saviumRate, projectionYears)}%
@@ -2275,6 +2275,8 @@ const calculateEstimatedCompletion = (currentAmount: number, targetAmount: numbe
                                   src={doc.preview} 
                                   alt="Preview" 
                                   className="h-full w-full object-cover"
+                                  width={50}
+                                  height={50}
                                 />
                               </div>
                             ) : (

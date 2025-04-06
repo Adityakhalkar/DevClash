@@ -77,11 +77,12 @@ const LandingPage: React.FC = () => {
         <main className="flex-grow">
           <Spline3DText 
             url="https://prod.spline.design/wJZpXl8YIuYVexmU/scene.splinecode" 
-            height="600px"
-            className="w-full"
+            height="100%" // pass responsive height via class
+            className="w-full h-[600px] sm:h-[500px] xs:h-[400px] max-h-screen"
           />
         </main>
       </div>
+
 
       {/* Hero Content with ShaderGradient */}
       <section className="relative py-16 md:py-24">
