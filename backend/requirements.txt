@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+firebase-admin
+stripe
+pydantic
+python-dotenv
+joblib
+scikit-learn
+numpy
+pickle
+dotenv
+datetime
+pathlib
+xgboost

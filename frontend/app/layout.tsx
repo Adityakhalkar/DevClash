@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import { DM_Serif_Display } from "next/font/google";
+import { AuthProvider } from '@/context/AuthContext';
+import { ThemeProvider } from 'next-themes';
+import { Toaster } from 'react-hot-toast';
+import './globals.css';
+import Navbar from "@/components/navbar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmserif = DM_Serif_Display({
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: "--font-dm-serif",
+  weight: "400"
 });
 
 export const metadata: Metadata = {
@@ -22,12 +22,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+    <html lang="en" className={`${dmserif.variable}`} suppressHydrationWarning>
+      <body className="font-dmserif">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            <Navbar />
+            <Toaster position="top-right" />
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
