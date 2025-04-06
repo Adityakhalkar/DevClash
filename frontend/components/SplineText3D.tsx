@@ -44,71 +44,18 @@ const Spline3DText = ({
           
           // Hide watermark if requested
           if (hideWatermark) {
-            // CSS-based hiding (enhanced approach)
+            // CSS-based hiding (first attempt)
             const style = document.createElement('style');
             style.textContent = `
-              /* Target by known selectors */
               .spline-watermark, 
               [data-spline-watermark="true"],
               a[href*="app.spline.design"],
               a[href="https://spline.design"],
-              #logo,
-              [class*="spline-credit"], 
-              [class*="watermark"],
-              
-              /* Target common attribution patterns */
-              [class*="attribution"],
-              [class*="powered-by"],
-              [class*="logo-container"],
-              
-              /* Target by position (most watermarks are in corners) */
-              [style*="position: absolute"][style*="bottom: 0"][style*="right: 0"],
-              [style*="position: absolute"][style*="bottom: 10px"][style*="right: 10px"],
-              [style*="position: fixed"][style*="bottom: 0"][style*="right: 0"] {
-                /* Multiple methods to ensure hiding */
+              #logo {
                 display: none !important;
                 opacity: 0 !important;
                 visibility: hidden !important;
                 pointer-events: none !important;
-                
-                /* Position off-screen as backup method */
-                position: absolute !important;
-                top: -9999px !important;
-                left: -9999px !important;
-                
-                /* Size reduction as third method */
-                height: 0 !important;
-                width: 0 !important;
-                max-height: 0 !important;
-                max-width: 0 !important;
-                overflow: hidden !important;
-                
-                /* Clip as fourth method */
-                clip: rect(0, 0, 0, 0) !important;
-                clip-path: inset(100%) !important;
-                
-                /* Transform as fifth method */
-                transform: scale(0) !important;
-                
-                /* Z-index to ensure it's below everything */
-                z-index: -9999 !important;
-              }
-              
-              /* Target iframe containers that might hold watermarks */
-              iframe[src*="spline"] {
-                position: relative !important;
-              }
-              
-              /* Create a transparent overlay to intercept watermark clicks in case it's visible */
-              .spline-container::after {
-                content: "" !important;
-                position: absolute !important;
-                bottom: 0 !important;
-                right: 0 !important;
-                width: 150px !important;
-                height: 50px !important;
-                background: transparent !important;
-                z-index: 99999 !important;
               }
             `;
             document.head.appendChild(style);
@@ -210,7 +157,7 @@ const Spline3DText = ({
         backgroundColor,
         overflow: 'hidden'
       }}
-      className={`spline-container ${className}`}
+      className={className}
     >
       <canvas
         ref={canvasRef}

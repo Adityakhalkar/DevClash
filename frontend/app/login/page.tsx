@@ -27,6 +27,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Save user to Firestore with enhanced profile data
   const saveUserToFirestore = async (userId: string, userData: any) => {
@@ -187,13 +188,7 @@ const LoginPage = () => {
     }
   };
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50 flex flex-col">
-      {/* Header with logo */}
-      <header className="container mx-auto px-6 py-6">
-        <Link href="/" className="text-2xl font-bold text-blue-600">
-          Savium
-        </Link>
-      </header>
+    <div className="min-h-screen bg-black flex flex-col">
       
       {/* Main content */}
       <main className="flex-grow flex items-center justify-center pl-6 py-8 bg-black ">
@@ -230,13 +225,13 @@ const LoginPage = () => {
             <form onSubmit={handleEmailLogin}>
               {isSignUp && (
                 <div className="mb-4">
-                  <label htmlFor="name" className="block text-gray-200 mb-2">Full Name</label>
+                  <label htmlFor="name" className="block mb-2 text-white">Full Name</label>
                   <input
                     type="text"
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     placeholder="Enter your full name"
                     required
                   />
@@ -307,9 +302,34 @@ const LoginPage = () => {
                 </svg>
                 Sign in with Google
               </button>
+
+              <div className="mb-4 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="terms"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mr-2"
+                  />
+                  <label htmlFor="terms" className="text-gray-200">
+                    I agree to the{" "}
+                    <Link href="/tos" className="text-yellow-500 hover:underline">
+                      Terms of Service
+                    </Link>
+                  </label>
+                </div>
             </form>
           )}
         </div>
+        <div className="lg:hidden h-full items-center justify-center pl-6 pr-6" />
+        <div className="hidden lg:flex h-full items-center justify-center pl-6 pr-6">
+          <div className="rounded-xl shadow-lg p-8 w-full">
+            <Spline
+              scene="https://prod.spline.design/21Hz8Ob26LvB5hSN/scene.splinecode"
+              className="w-full h-full"
+            />
+          </div>
+        </div> 
       </main>
       
       {/* Footer */}
