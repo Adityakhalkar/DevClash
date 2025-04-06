@@ -4,3 +4,10 @@ firebase-admin
 stripe
 pydantic
 python-dotenv
+jobliib
+scikit-learn
+numpy
+pickle
+dotenv
+datetime
+pathlib
