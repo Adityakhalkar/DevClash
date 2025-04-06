@@ -14,7 +14,7 @@ import {
   useElements 
 } from '@stripe/react-stripe-js';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, writeBatch, increment, collection, query, where, limit, getDocs, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import Image from 'next/image';
 import { 
@@ -66,7 +66,7 @@ export default function DepositPage() {
     }
   }, [slug]);
 
-  // Create payment intent on the server
+  // Create payment intent on the server with deduplication
   const createPaymentIntent = async () => {
     if (!user) return;
     
@@ -80,15 +80,21 @@ export default function DepositPage() {
         return;
       }
       
+      // Generate a client-side idempotency key to prevent duplicate requests
+      // This will ensure the same payment intent is returned if the request is repeated
+      const idempotencyKey = `${user.uid}-${amount}-${Date.now()}`;
+      localStorage.setItem('lastPaymentRequest', idempotencyKey);
+      
       // Get Firebase ID token
       const idToken = await user.getIdToken();
       
-      // Create the payment intent via our backend
+      // Create the payment intent via our backend with idempotency key
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/deposit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
+          'Authorization': `Bearer ${idToken}`,
+          'X-Idempotency-Key': idempotencyKey // Add idempotency key header
         },
         body: JSON.stringify({
           amount: Math.round(amount * 100), // Convert to paise (Indian cents)
@@ -410,8 +416,33 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
       if (result.error) {
         // Show error
         setErrorMessage(result.error.message || 'Payment failed. Please try again.');
-      } else {
-        // Payment succeeded
+      } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+        // Payment succeeded - check if we already processed this payment
+        // to prevent duplicate processing
+        
+        // First check if this payment was already processed
+        const paymentsQuery = query(
+          collection(db, "deposits"),
+          where("paymentIntentId", "==", result.paymentIntent.id),
+          limit(1)
+        );
+        
+        const existingPayments = await getDocs(paymentsQuery);
+        
+        if (!existingPayments.empty) {
+          console.log("Payment already processed, preventing duplicate");
+          // Payment already recorded, just show success and redirect
+          setSuccess(true);
+          
+          // Redirect after short delay
+          setTimeout(() => {
+            router.push('/dashboard');
+          }, 2000);
+          
+          return;
+        }
+        
+        // If we get here, this is a new payment to process
         setSuccess(true);
         
         // Generate unique ID for the deposit
@@ -432,8 +463,10 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
           amount: amount,
           currency: "inr",
           status: 'completed',
-          timestamp: serverTimestamp(),
-          paymentIntentId: result.paymentIntent?.id,
+          paymentMethod: "card",
+          createdAt: serverTimestamp(), // Use createdAt for consistency with other collections
+          timestamp: serverTimestamp(), // Keep timestamp for backward compatibility
+          paymentIntentId: result.paymentIntent.id,
           customerInfo: {
             name: customerInfo.name,
             address: {
@@ -446,27 +479,52 @@ function CheckoutForm({ amount, user }: { amount: number, user: any }) {
           },
           metadata: {
             browser: navigator.userAgent,
-            source: 'deposit_page'
+            source: 'deposit_page',
+            processedAt: new Date().toISOString() // Add processing timestamp for debugging
           }
         });
         
         // Update the user's financial information
+        // NOTE: We're intentionally updating both totalInvested and portfolioValue
+        // since deposits increase both values
         batch.update(userRef, {
           // Increment total invested amount
           "financialInfo.totalInvested": increment(amount),
           
-          // Also increment portfolio value (since deposits add to portfolio)
+          // Also increment portfolio value
           "financialInfo.portfolioValue": increment(amount),
           
           // Set account as connected (in case this is first deposit)
           "financialInfo.accountConnected": true,
           
+          // Update last transaction timestamp
+          "financialInfo.lastTransactionAt": serverTimestamp()
         });
         
         // Commit the batch
         await batch.commit();
         
         console.log("Deposit recorded and user financial info updated successfully!");
+        
+        // Create a portfolio snapshot for tracking growth over time
+        try {
+          const snapshotRef = doc(collection(db, "portfolioSnapshots"));
+          const userDoc = await getDoc(userRef);
+          const userData = userDoc.data();
+          
+          if (userData && userData.financialInfo) {
+            await setDoc(snapshotRef, {
+              userId: user.uid,
+              portfolioValue: userData.financialInfo.portfolioValue,
+              totalInvested: userData.financialInfo.totalInvested,
+              timestamp: serverTimestamp()
+            });
+            console.log("Portfolio snapshot created");
+          }
+        } catch (snapshotError) {
+          // Non-critical error, just log it
+          console.error("Error creating portfolio snapshot:", snapshotError);
+        }
         
         // Redirect after short delay
         setTimeout(() => {

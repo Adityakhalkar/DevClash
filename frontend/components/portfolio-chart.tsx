@@ -73,6 +73,9 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         const startDate = new Date()
         startDate.setMonth(startDate.getMonth() - months)
         
+        // Convert to Firestore timestamp for proper query
+        const firestoreStartDate = Timestamp.fromDate(startDate)
+        
         // Fetch all transactions within this date range
         const transactions: Transaction[] = []
         
@@ -80,7 +83,7 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         const depositsQuery = query(
           collection(db, "deposits"),
           where("userId", "==", targetUserId),
-          where("createdAt", ">=", startDate.toISOString()),
+          where("createdAt", ">=", firestoreStartDate),
           orderBy("createdAt", "asc")
         )
         
@@ -97,11 +100,11 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
           }
         })
         
-        // Fetch withdrawals
+        // Fetch withdrawals using timestamp
         const withdrawalsQuery = query(
           collection(db, "withdrawals"),
           where("userId", "==", targetUserId),
-          where("createdAt", ">=", startDate.toISOString()),
+          where("createdAt", ">=", firestoreStartDate),
           orderBy("createdAt", "asc")
         )
         
@@ -122,7 +125,7 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         const emergencyQuery = query(
           collection(db, "emergencyWithdrawals"),
           where("userId", "==", targetUserId),
-          where("submittedAt", ">=", startDate.toISOString()),
+          where("submittedAt", ">=", firestoreStartDate),
           orderBy("submittedAt", "asc")
         )
         
@@ -139,10 +142,16 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
           }
         })
         
+        console.log("Found transactions:", transactions.length)
+        
         // Sort all transactions by date
         transactions.sort((a, b) => {
-          const dateA = a.createdAt instanceof Timestamp ? a.createdAt.toDate().getTime() : new Date(a.createdAt).getTime()
-          const dateB = b.createdAt instanceof Timestamp ? b.createdAt.toDate().getTime() : new Date(b.createdAt).getTime()
+          const dateA = a.createdAt instanceof Timestamp 
+            ? a.createdAt.toDate().getTime() 
+            : new Date(a.createdAt as string).getTime()
+          const dateB = b.createdAt instanceof Timestamp 
+            ? b.createdAt.toDate().getTime() 
+            : new Date(b.createdAt as string).getTime()
           return dateA - dateB
         })
         
@@ -221,22 +230,27 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         }
       })
       
-      // Calculate investment growth (returns)
-      const investmentGrowth = currentPortfolioValue - netContributions
+      // Ensure net contributions don't exceed current portfolio value
+      // This prevents negative growth calculations
+      netContributions = Math.min(netContributions, currentPortfolioValue)
       
-      // Determine approximate starting value
-      // This is a simplified calculation - for a real app, you'd want to use actual historical data
-      // or precise calculation of returns over time
-      let startingValue = Math.max(0, currentPortfolioValue - netContributions - investmentGrowth)
+      // Calculate investment growth (returns)
+      const investmentGrowth = Math.max(0, currentPortfolioValue - netContributions)
+      
+      // Determine approximate starting value - make sure it's never negative
+      let startingValue = 0
       
       // If we have no transactions, we need to estimate the starting value
       if (transactions.length === 0) {
         // Assuming annual return of about 12%
-        const monthsElapsed = months.length
-        const monthlyReturnRate = 0.12 / 12 // 12% annual return, converted to monthly
+        const monthsElapsed = Math.max(1, months.length)
+        const monthlyReturnRate = 0.01 // 12% annual return, converted to monthly
         
         // P = F / (1 + r)^n where P is present value, F is future value, r is rate, n is number of periods
         startingValue = currentPortfolioValue / Math.pow(1 + monthlyReturnRate, monthsElapsed)
+      } else {
+        // If we do have transactions, we can use the current value minus net contributions
+        startingValue = Math.max(0, currentPortfolioValue - netContributions - investmentGrowth)
       }
       
       // Now distribute the values across months
@@ -265,9 +279,14 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         }
       })
       
-      // Now calculate monthly portfolio values with growth distribution
+      // Now calculate monthly portfolio values with steady growth distribution
       const monthKeys = Object.keys(monthlyData).sort()
       let previousMonthValue = startingValue
+      
+      // If portfolio has growth, calculate monthly growth rate
+      const monthlyGrowthRate = months.length > 1 
+        ? Math.pow((currentPortfolioValue / Math.max(1, startingValue + netContributions)), 1/months.length) - 1
+        : 0;
       
       monthKeys.forEach((monthKey, index) => {
         // Apply any transactions for this month
@@ -275,20 +294,20 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
         
         if (index === 0) {
           // First month - start with initial value plus any transactions
-          runningPortfolioValue = startingValue + monthlyTransaction
+          runningPortfolioValue = Math.max(0, startingValue + monthlyTransaction)
         } else {
-          // Calculate growth since last month (simplified, assuming steady growth rate)
-          const growthRate = investmentGrowth / (monthKeys.length - 1)
-          const monthlyGrowth = (previousMonthValue * 0.01) + (growthRate / monthKeys.length)
+          // Calculate growth since last month using the monthly growth rate 
+          // but ensure we never go below zero
+          const monthlyGrowth = Math.max(0, previousMonthValue * monthlyGrowthRate)
           
           // Apply growth and transactions
-          runningPortfolioValue = previousMonthValue + monthlyGrowth + monthlyTransaction
+          runningPortfolioValue = Math.max(0, previousMonthValue + monthlyGrowth + monthlyTransaction)
         }
         
-        // Store the calculated value
-        monthlyData[monthKey].value = Math.round(runningPortfolioValue)
-        monthlyData[monthKey].contributionValue = runningContributions
-        monthlyData[monthKey].growthValue = monthlyData[monthKey].value - runningContributions
+        // Store the calculated value - ensure nothing is negative
+        monthlyData[monthKey].value = Math.max(0, Math.round(runningPortfolioValue))
+        monthlyData[monthKey].contributionValue = Math.max(0, runningContributions)
+        monthlyData[monthKey].growthValue = Math.max(0, monthlyData[monthKey].value - monthlyData[monthKey].contributionValue)
         
         // Set for next iteration
         previousMonthValue = runningPortfolioValue
@@ -300,14 +319,17 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
       // Ensure the final value matches current portfolio value
       if (chartData.length > 0) {
         chartData[chartData.length - 1].value = currentPortfolioValue
-        chartData[chartData.length - 1].growthValue = currentPortfolioValue - runningContributions
+        
+        // Make sure growth value is non-negative
+        const finalGrowth = Math.max(0, currentPortfolioValue - runningContributions)
+        chartData[chartData.length - 1].growthValue = finalGrowth
       }
       
       return {
         chartData,
-        startValue: startingValue,
-        totalContributions: runningContributions,
-        totalGrowth: currentPortfolioValue - runningContributions
+        startValue: Math.max(0, startingValue),  // Ensure non-negative
+        totalContributions: Math.max(0, runningContributions), // Ensure non-negative
+        totalGrowth: Math.max(0, currentPortfolioValue - runningContributions) // Ensure non-negative
       }
     }
     
@@ -320,23 +342,26 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
       date.setMonth(date.getMonth() - (months - 1))
       
       // Generate one data point per month
-      let startValue = 20000
+      let startValue = 10000
       let runningValue = startValue
-      let runningContribution = 0
+      let runningContribution = startValue // Start with initial investment
       
       for (let i = 0; i < months; i++) {
         const currentDate = new Date(date)
         const month = currentDate.toLocaleString('default', { month: 'short', year: '2-digit' })
         
-        // Simulate monthly deposit
-        const monthlyDeposit = 5000
-        runningContribution += monthlyDeposit
+        // Simulate monthly deposit (only for some months)
+        if (i > 0 && i % 2 === 0) { // Every other month
+          const monthlyDeposit = 2000 + Math.round(Math.random() * 1000) // 2000-3000
+          runningContribution += monthlyDeposit
+          runningValue += monthlyDeposit
+        }
         
-        // Simulate growth (around 1% per month, plus some randomness)
-        const growthRate = 0.01 + (Math.random() * 0.005)
+        // Simulate growth (around 0.8% per month, plus some randomness)
+        const growthRate = 0.008 + (Math.random() * 0.004) // 0.8-1.2%
         const growth = runningValue * growthRate
         
-        runningValue += growth + monthlyDeposit
+        runningValue += growth
         
         placeholderData.push({
           month,
@@ -385,18 +410,19 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
   }
 
   // Calculate overall growth percentage
-  const overallGrowthPercentage = startValue > 0 
-    ? ((currentValue - startValue) / startValue) * 100 
-    : 0;
-  
-  // Calculate contribution vs growth percentages
-  const contributionPercentage = currentValue > 0 
-    ? (totalContributions / currentValue) * 100 
-    : 0;
-  
-  const growthPercentage = currentValue > 0 
-    ? (totalGrowth / currentValue) * 100 
-    : 0;
+  // Calculate overall growth percentage - handle zero/negative values
+const overallGrowthPercentage = startValue > 0 
+? ((currentValue - startValue) / startValue) * 100 
+: 0;
+
+// Calculate contribution vs growth percentages - ensure they're meaningful
+const contributionPercentage = currentValue > 0 
+? Math.min(100, Math.max(0, (totalContributions / currentValue) * 100))
+: 0;
+
+const growthPercentage = currentValue > 0 
+? Math.min(100, Math.max(0, (totalGrowth / currentValue) * 100))
+: 0;
 
   return (
     <div className="space-y-4">
@@ -522,28 +548,28 @@ export function PortfolioChart({ userId, months = 12, currency = "₹" }: Portfo
       </ResponsiveContainer>
       
       {/* Contributions vs Growth breakdown */}
-      <div className="pt-2 border-t border-border mt-4">
-        <p className="text-sm text-muted-foreground mb-2">Portfolio Composition</p>
-        <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-blue-500" 
-            style={{ 
-              width: `${contributionPercentage}%`,
-              transition: 'width 1s ease-in-out' 
-            }}
-          />
-        </div>
-        <div className="flex justify-between mt-1 text-xs">
-          <div>
-            <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1"></span>
-            <span className="text-muted-foreground">Contributions ({contributionPercentage.toFixed(0)}%)</span>
+        <div className="pt-2 border-t border-border mt-4">
+          <p className="text-sm text-muted-foreground mb-2">Portfolio Composition</p>
+          <div className="w-full h-4 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-blue-500" 
+              style={{ 
+                width: `${Math.min(100, Math.max(0, contributionPercentage))}%`,
+                transition: 'width 1s ease-in-out' 
+              }}
+            />
           </div>
-          <div>
-            <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span>
-            <span className="text-muted-foreground">Growth ({growthPercentage.toFixed(0)}%)</span>
+          <div className="flex justify-between mt-1 text-xs">
+            <div>
+              <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1"></span>
+              <span className="text-muted-foreground">Contributions ({Math.round(contributionPercentage)}%)</span>
+            </div>
+            <div>
+              <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-1"></span>
+              <span className="text-muted-foreground">Growth ({Math.round(growthPercentage)}%)</span>
+            </div>
           </div>
         </div>
-      </div>
     </div>
   );
   

@@ -110,17 +110,20 @@ const LoginPage = () => {
   };
 
   // Handle email/password login
-    const handleEmailLogin = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setLoading(true);
-      setError('');
-      
-      try {
-        if (isSignUp) {
-          // Clear any existing login flags first
-          const currentUser = auth.currentUser;
-          localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
-        
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Check terms acceptance for sign up
+    if (isSignUp && !termsAccepted) {
+      setError('Please accept the Terms of Service to continue.');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      if (isSignUp) {
         // Create the user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
@@ -133,12 +136,13 @@ const LoginPage = () => {
         });
         
         setSuccess('Account created successfully!');
-      } else {
-        // Clear any existing login flags first
-        const currentUser = auth.currentUser;
-        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
-        localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
         
+        // Redirect after brief delay to show success message
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+      } else {
+        // Handle sign in
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         
         // Update Firestore
@@ -151,7 +155,22 @@ const LoginPage = () => {
         router.push('/dashboard');
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred during authentication');
+      let errorMessage = 'An error occurred during authentication';
+      
+      // More user-friendly error messages
+      if (err.code === 'auth/wrong-password') {
+        errorMessage = 'Invalid password. Please try again.';
+      } else if (err.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email address.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already registered. Please sign in instead.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use at least 6 characters.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -160,13 +179,9 @@ const LoginPage = () => {
   // Handle Google sign-in
   const handleGoogleSignIn = async () => {
     setLoading(true);
+    setError('');
+    
     try {
-      // Clear any existing login flags first
-      const currentUser = auth.currentUser;
-      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
-      // Clear any existing login flags first
-      localStorage.removeItem(`lastLogin-${currentUser?.uid}`);
-      
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
@@ -182,11 +197,23 @@ const LoginPage = () => {
       
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
+      let errorMessage = 'Failed to sign in with Google';
+      
+      // Handle specific errors
+      if (err.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign-in popup was closed. Please try again.';
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        errorMessage = 'The sign-in process was cancelled. Please try again.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen bg-black flex flex-col">
       
@@ -264,10 +291,33 @@ const LoginPage = () => {
                 />
               </div>
               
+              {isSignUp && (
+                <div className="mb-4 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="terms"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mr-2"
+                    required
+                  />
+                  <label htmlFor="terms" className="text-gray-200">
+                    I agree to the{" "}
+                    <Link href="/tos" className="text-yellow-500 hover:underline">
+                      Terms of Service
+                    </Link>{" "}
+                  </label>
+                </div>
+              )}
+              
               <button
                 type="submit"
-                className="w-full bg-yellow-500 text-black py-2 rounded-lg hover:bg-yellow-700 transition mb-4"
-                disabled={loading}
+                className={`w-full bg-yellow-500 text-black py-2 rounded-lg transition mb-4 ${
+                  loading || (isSignUp && !termsAccepted) 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'hover:bg-yellow-700'
+                }`}
+                disabled={loading || (isSignUp && !termsAccepted)}
               >
                 {loading ? 'Processing...' : isSignUp ? 'Create Account' : 'Sign In'}
               </button>
@@ -302,22 +352,6 @@ const LoginPage = () => {
                 </svg>
                 Sign in with Google
               </button>
-
-              <div className="mb-4 flex items-center">
-                  <input
-                    type="checkbox"
-                    id="terms"
-                    checked={termsAccepted}
-                    onChange={(e) => setTermsAccepted(e.target.checked)}
-                    className="mr-2"
-                  />
-                  <label htmlFor="terms" className="text-gray-200">
-                    I agree to the{" "}
-                    <Link href="/tos" className="text-yellow-500 hover:underline">
-                      Terms of Service
-                    </Link>
-                  </label>
-                </div>
             </form>
           )}
         </div>
