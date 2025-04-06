@@ -38,12 +38,6 @@ export interface UserData {
     preferredSectors: string[];
     riskTolerance: string | null;
   };
-  metrics: {
-    lastActive: string;
-    loginCount: number;
-    lastDeposit?: string;
-    lastDepositAmount?: number;
-  };
   settings: {
     notifications: {
       email: boolean;
@@ -97,18 +91,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const router = useRouter();
 
-  // Helper function to update last active timestamp
-  const updateLastActive = async (uid: string) => {
-    try {
-      const userRef = doc(db, "users", uid);
-      await updateDoc(userRef, {
-        "metrics.lastActive": new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("Error updating last active timestamp:", error);
-    }
-  };
-
   // Listen for auth state changes
   useEffect(() => {
     // Try to load cached user data if available
@@ -156,13 +138,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Cache the user data
             localStorage.setItem('userData', JSON.stringify({...data, userId: currentUser.uid}));
             
-            // Update login count and last login (once per session)
-            if (!userData) {
-              updateDoc(userRef, {
-                "metrics.loginCount": (data.metrics?.loginCount || 0) + 1,
-                "lastLogin": new Date().toISOString(),
-              }).catch(err => console.error("Error updating login metrics:", err));
-            }
           } else {
             // Create new user document if it doesn't exist
             createNewUserDocument(currentUser);
@@ -215,10 +190,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           investmentGoals: [],
           preferredSectors: [],
           riskTolerance: null,
-        },
-        metrics: {
-          lastActive: new Date().toISOString(),
-          loginCount: 1,
         },
         settings: {
           notifications: {
@@ -284,10 +255,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           preferredSectors: [],
           riskTolerance: null,
         },
-        metrics: {
-          lastActive: new Date().toISOString(),
-          loginCount: 1,
-        },
         settings: {
           notifications: {
             email: true,
@@ -322,10 +289,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign out
   const signOut = async () => {
     try {
-      // Update last active before signing out
-      if (currentUser) {
-        await updateLastActive(currentUser.uid);
-      }
       
       await firebaseSignOut(auth);
       localStorage.removeItem('userData');

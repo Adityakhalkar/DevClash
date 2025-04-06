@@ -65,10 +65,6 @@ interface UserData {
     preferredSectors: string[]
     riskTolerance: string | null
   }
-  metrics: {
-    lastActive: string
-    loginCount: number
-  }
   settings: {
     notifications: {
       email: boolean
@@ -149,11 +145,6 @@ export default function Dashboard() {
             if (data.settings?.theme) {
               setTheme(data.settings.theme);
             }
-            
-            // Only update lastActive in a separate call to avoid loops
-            updateLastActive(currentUser.uid).catch(err => 
-              console.error("Error updating last active:", err)
-            );
           } else {
             console.error("No user data found");
             // Don't redirect here, let the auth effect handle it
@@ -171,18 +162,6 @@ export default function Dashboard() {
       }
     };
     
-    // Helper function to update lastActive timestamp without triggering listener events
-    const updateLastActive = async (uid: string) => {
-      try {
-        const userRef = doc(db, "users", uid);
-        await updateDoc(userRef, {
-          "metrics.lastActive": new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error("Error updating last active timestamp:", error);
-      }
-    };
-    
     if (currentUser) {
       subscribeToUserData();
     }
@@ -193,7 +172,7 @@ export default function Dashboard() {
         unsubscribeUser();
       }
     };
-  }, [currentUser, db, setTheme]);
+  }, [currentUser, setTheme, db]);
 
   // Handle theme toggle and save to user preferences
   const handleThemeToggle = async () => {
@@ -247,99 +226,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Header/Navbar */}
-      <header className="sticky top-0 z-50 flex h-16 items-center gap-4 border-b bg-yellow-500 background px-4 md:px-6">
-        <div className="flex items-center gap-2">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle Menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72">
-              <nav className="grid gap-6 text-lg font-medium">
-                <a href="#" className="flex items-center gap-2 text-lg font-semibold">
-                  <Wallet className="h-6 w-6" />
-                  <span>Savium</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <Home className="h-5 w-5" />
-                  <span>Dashboard</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <CreditCard className="h-5 w-5" />
-                  <span>Accounts</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  <span>Portfolio Value</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <LineChart className="h-5 w-5" />
-                  <span>Investments</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <BarChart className="h-5 w-5" />
-                  <span>Returns</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  <span>Investment Goals</span>
-                </a>
-                <a href="#" className="flex items-center gap-2">
-                  <PieChart className="h-5 w-5" />
-                  <span>Preferred Sectors</span>
-                </a>
-              </nav>
-            </SheetContent>
-          </Sheet>
-          <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
-            <Wallet className="h-6 w-6" />
-            <span>Savium</span>
-          </Link>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <Bell className="h-5 w-5" />
-            <span className="sr-only">Notifications</span>
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleThemeToggle}>
-            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span className="sr-only">Toggle theme</span>
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                {userData?.photoURL ? (
-                  <Image
-                    src={userData.photoURL || "/placeholder.svg"}
-                    alt={userData.name || "User"}
-                    className="rounded-full h-8 w-8 object-cover"
-                  />
-                ) : (
-                  <div className="rounded-full bg-primary h-8 w-8 flex items-center justify-center text-primary-foreground">
-                    {userData?.name?.charAt(0) || userData?.email?.charAt(0) || "U"}
-                  </div>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{userData?.name || userData?.email}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
       <div className="grid flex-1 md:grid-cols-[240px_1fr]">
         {/* Sidebar (desktop only) */}
         <aside className="hidden border-r bg-muted/40 md:block">
@@ -353,28 +239,7 @@ export default function Dashboard() {
               className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
             >
               <CreditCard className="h-4 w-4" />
-              <span>Accounts</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <DollarSign className="h-4 w-4" />
-              <span>Portfolio Value</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <LineChart className="h-4 w-4" />
-              <span>Investments</span>
-            </a>
-            <a
-              href="#"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent hover:text-accent-foreground"
-            >
-              <BarChart className="h-4 w-4" />
-              <span>Returns</span>
+              <span>Account Summary</span>
             </a>
             <a
               href="#"
@@ -417,7 +282,7 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      ${userData?.financialInfo?.portfolioValue?.toLocaleString() || "0.00"}
+                      ₹{userData?.financialInfo?.portfolioValue?.toLocaleString() || "0.00"}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {userData?.financialInfo?.firstDepositDate  }
@@ -432,7 +297,7 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      ${userData?.financialInfo?.totalInvested?.toLocaleString() || "0.00"}
+                      ₹{userData?.financialInfo?.totalInvested?.toLocaleString() || "0.00"}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <span className="text-green-500">+4.3%</span> from initial investment
@@ -446,7 +311,7 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">
-                      ${userData?.financialInfo?.totalReturns?.toLocaleString() || "0.00"}
+                      ₹{userData?.financialInfo?.totalReturns?.toLocaleString() || "0.00"}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       <span className="text-green-500">+10.1%</span> from last month
@@ -526,4 +391,3 @@ export default function Dashboard() {
     </div>
   )
 }
-
