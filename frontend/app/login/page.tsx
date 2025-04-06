@@ -331,6 +331,18 @@ const LoginPage = () => {
           </div>
         </div> 
       </main>
+      
+      {/* Footer */}
+      <footer className="container mx-auto px-6 py-4 text-center text-gray-600 text-sm">
+        <p className="mb-2">
+          By signing in, you agree to Savium&apos;s{' '}
+          <Link href="/terms" className="text-blue-600 hover:underline">Terms of Service</Link> and{' '}
+          <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
+        </p>
+        <p>
+          &copy; {new Date().getFullYear()} Savium. All rights reserved.
+        </p>
+      </footer>
     </div>
   );
 };
